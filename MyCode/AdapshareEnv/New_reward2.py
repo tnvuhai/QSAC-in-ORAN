@@ -198,8 +198,8 @@ model = DDPG(
     batch_size=48,                      # = MiniBatchSize
     tau=0.001,                           # = TargetSmoothFactor
     gamma=0.95,                         # = DiscountFactor
-    train_freq=(5, "step"),
-    gradient_steps=5,
+    train_freq=(1, "step"),
+    gradient_steps=1,
     verbose=1,
     policy_kwargs=dict(net_arch=[256, 256]),
     tensorboard_log="./ddpg_tensorboard/"
