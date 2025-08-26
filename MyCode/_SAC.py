@@ -12,6 +12,7 @@ from MainEnv import ResourceAllocationEnv, load_demand_data  # Tái sử dụng
 # =============================
 # 1. Actor-Critic Networks
 # =============================
+
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, max_action):
         super().__init__()
@@ -183,7 +184,7 @@ if __name__ == '__main__':
 
         while not done:
             action = agent.select_action(state)
-            next_state, reward, terminated, truncated, _ = env.step(action)
+            next_state, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             buffer.add(state, action, reward, next_state, float(done))
             state = next_state
@@ -194,7 +195,10 @@ if __name__ == '__main__':
 
         rewards.append(total_reward)
         logs.append({"episode": ep, "reward": total_reward})
-        print(f"Episode {ep}, Reward: {total_reward:.2f}")
+        alloc_lte, alloc_nr = info["alloc"]
+        demand_lte, demand_nr = info["demand"]
+        print(f"Episode {ep}, Reward: {total_reward:.2f}, | Demand=({demand_lte:.1f}, {demand_nr :.1f}) "
+              f"| Alloc=({alloc_lte:.1f}, {alloc_nr:.1f})")
 
     torch.save(agent.actor.state_dict(), "Model/sac_actor_model.pth")
     pd.DataFrame(logs).to_csv("Result/sac_training_log.csv", index=False)

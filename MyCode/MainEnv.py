@@ -12,7 +12,7 @@ class ResourceAllocationEnv(gym.Env):
         self.scaling = scaling
         self.history_len = history_len
         self.max_steps = max_steps
-
+        self._cursor = self.history_len
         self.lte_demand = lte_file
         self.nr_demand = nr_file
         self.total_len = len(self.lte_demand)
@@ -29,22 +29,36 @@ class ResourceAllocationEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
+        # Mỗi episode chỉ có 1 step => reset bộ đếm bước,
+        # nhưng KHÔNG reset self.idx để thời gian tiếp tục chạy 0->1->...->n->0->...
         self.step_count = 0
-        self.idx = self.history_len
+
+        # Chỉ khởi tạo idx = 0 đúng 1 lần đầu tiên
+        if not hasattr(self, "_initialized") or not self._initialized:
+            self.idx = 0
+            self._initialized = True
+
         return self._get_obs(), {}
+        # super().reset(seed=seed)
+        # self.step_count = 0
+        # self.idx = self._cursor
+        # # dịch con trỏ cho episode sau
+        # self._cursor = min(self._cursor + self.max_steps, self.total_len - 1)
+        # return self._get_obs(), {}
 
     def _get_obs(self):
-        raw_lte_hist = self.lte_demand[self.idx - self.history_len + 1: self.idx + 1]
-        raw_nr_hist = self.nr_demand[self.idx - self.history_len + 1: self.idx + 1]
+        idxs = [(self.idx - k) % self.total_len for k in range(self.history_len-1, -1, -1)]
+        raw_lte_hist = self.lte_demand[idxs]
+        raw_nr_hist  = self.nr_demand[idxs]
 
         lte_hist = (raw_lte_hist - self.lte_min) / (self.lte_max - self.lte_min + 1e-8)
-        nr_hist = (raw_nr_hist - self.nr_min) / (self.nr_max - self.nr_min + 1e-8)
+        nr_hist  = (raw_nr_hist  - self.nr_min)  / (self.nr_max  - self.nr_min  + 1e-8)
 
         current_lte = (self.lte_demand[self.idx] - self.lte_min) / (self.lte_max - self.lte_min + 1e-8)
-        current_nr = (self.nr_demand[self.idx] - self.nr_min) / (self.nr_max - self.nr_min + 1e-8)
+        current_nr  = (self.nr_demand[self.idx]  - self.nr_min)  / (self.nr_max  - self.nr_min  + 1e-8)
 
-        normalized_time = self.idx / self.total_len
-        
+        normalized_time = (self.idx % self.total_len) / max(self.total_len - 1, 1)
+
         obs = np.concatenate([
             lte_hist,
             nr_hist,
@@ -85,26 +99,30 @@ class ResourceAllocationEnv(gym.Env):
         return reward
 
     def step(self, action):
-        action = np.clip(action, 0.01, 1.00)
+        action = np.clip(action, 0.00, 1.00)
         alloc = action * self.N_R
         total_alloc = np.sum(alloc)
         if total_alloc > self.N_R:
             alloc = (alloc / total_alloc) * self.N_R
 
+        # demand tại thời điểm t hiện tại (trước khi tăng idx)
         demand_lte = self.lte_demand[self.idx]
-        demand_nr = self.nr_demand[self.idx]
+        demand_nr  = self.nr_demand[self.idx]
 
         reward = self.reward_function([demand_lte, demand_nr, self.gamma, self.N_R], alloc)
 
-        self.idx += 1
+        # advance thời gian: quay vòng khi tới cuối
+        self.idx = (self.idx + 1) % self.total_len
         self.step_count += 1
-
-        terminated = self.idx >= self.total_len
-        truncated = self.step_count >= self.max_steps
+        #print(self.idx)
+        # không dùng terminated theo idx nữa; chỉ truncated theo số bước/episode
+        terminated = False
+        truncated  = (self.step_count >= self.max_steps)
 
         return self._get_obs(), reward, terminated, truncated, {
             "alloc": alloc,
-            "demand": (demand_lte, demand_nr)
+            "demand": (demand_lte, demand_nr),
+            "t_idx": (self.idx - 1) % self.total_len   # (tuỳ chọn) index vừa dùng
         }
     
 def load_demand_data(file_path):
