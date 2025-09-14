@@ -29,17 +29,17 @@ def _rand_init_near_pi_over_2(tensor, eps=0.1):
 #    - Returns expvals of PauliZ on each qubit (size = n_qubits)
 # =============================================================
 class ReUploadingVQC(nn.Module):
-    def __init__(self, n_qubits: int, qnn_layers: int, device_name: str = "best"):
+    def __init__(self, n_qubits: int, qnn_layers: int, device_name: str = "lightning.qubit"):
         super().__init__()
         self.n_qubits = n_qubits
         self.qnn_layers = qnn_layers
         self.dev = qml.device(device_name, wires=n_qubits, shots=None)
 
         # Entangling params (giữ kiến trúc cũ để tương thích tối đa)
-        ent_shape_single = qml.StronglyEntanglingLayers.shape(n_layers=1, n_wires=n_qubits)
-        self.entangling_weights = nn.Parameter(
-            torch.randn((qnn_layers + 1,) + ent_shape_single) * 0.05
-        )
+        # ent_shape_single = qml.StronglyEntanglingLayers.shape(n_layers=1, n_wires=n_qubits)
+        # self.entangling_weights = nn.Parameter(
+        #     torch.randn((qnn_layers + 1,) + ent_shape_single) * 0.05
+        # )
 
         # Re-uploading: ω và φ (scale + bias) — thay cho chỉ "nhân emb_w"
         self.omega = nn.Parameter(torch.ones(qnn_layers, n_qubits) * 0.5)
@@ -53,27 +53,40 @@ class ReUploadingVQC(nn.Module):
         self.entangling_weights = nn.Parameter(
             torch.randn((qnn_layers + 1,) + ent_shape_single) * 0.05
         )
-        self.embedding_weights = nn.Parameter(torch.randn(qnn_layers, n_qubits) * 0.05)
+        # self.embedding_weights = nn.Parameter(torch.randn(qnn_layers, n_qubits) * 0.05)
 
+        # @qml.batch_input(argnum=0)
         @qml.qnode(self.dev, interface="torch", diff_method="adjoint")
         def circuit(inputs, ent_w, omega, phi, rot_pre):
             # Prepare |0...0| (use BasisState for modern PL; matches your BasisStatePreparation intent)
             qml.BasisState(torch.zeros(self.n_qubits, dtype=torch.int64), wires=range(self.n_qubits))
             for i in range(self.qnn_layers):
-                qml.StronglyEntanglingLayers(ent_w[i], wires=range(self.n_qubits))
                 feats = omega[i] * inputs + phi[i]
                 qml.AngleEmbedding(features=feats, wires=range(self.n_qubits), rotation='Y')
+                qml.StronglyEntanglingLayers(ent_w[i], wires=range(self.n_qubits))
             qml.StronglyEntanglingLayers(ent_w[-1], wires=range(self.n_qubits))
             # Pre-measurement rotations để “đưa” điểm làm việc ~0
             for q in range(self.n_qubits):
                 a,b,g = rot_pre[q]
                 qml.Rot(a, b, g, wires=q)
 
-            # Pooling đa trục: Z và X
-            obs = [qml.PauliZ(w) for w in range(self.n_qubits)] + [qml.PauliX(w) for w in range(self.n_qubits)]
+            # Pooling đa trục: Z, X, Y
+            obs = [qml.PauliZ(w) for w in range(self.n_qubits)] + [qml.PauliX(w) for w in range(self.n_qubits)] + [qml.PauliY(w) for w in range(self.n_qubits)]
             return [qml.expval(o) for o in obs]
 
         self.circuit = circuit
+
+    # def forward(self, x: torch.Tensor) -> torch.Tensor:
+    #     if x.dim() == 1:
+    #         out = torch.stack(self.circuit_single(x, self.entangling_weights, self.omega, self.phi, self.rot_pre))
+    #         return out.to(x.dtype)                               # (3*n_qubits,)
+    #     else:
+    #         out = self.circuit_batched(x, self.entangling_weights, self.omega, self.phi, self.rot_pre)
+    #         # out: (B, 3*n_qubits)
+    #         # nếu backend trả list, ép stack:
+    #         if isinstance(out, (list, tuple)):
+    #             out = torch.stack(out, dim=1)                    # phòng trường hợp PL cũ
+    #         return out.to(x.dtype)
 
     def forward_single(self, x: torch.Tensor) -> torch.Tensor:
         out = torch.stack(self.circuit(x, self.entangling_weights, self.omega, self.phi, self.rot_pre))
@@ -94,7 +107,7 @@ class ReUploadingVQC(nn.Module):
 # =============================================================
 class QuantumActor(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, max_action: float,
-                 n_qubits: int = 6, qnn_layers: int = 2, device_name: str = "best"):
+                 n_qubits: int = 6, qnn_layers: int = 2, device_name: str = "lightning.qubit"):
         super().__init__()
         self.max_action = max_action
         self.n_qubits = n_qubits
@@ -103,25 +116,13 @@ class QuantumActor(nn.Module):
 
         self.in_norm  = nn.LayerNorm(n_qubits)
         self.beta     = nn.Parameter(torch.tensor(0.5))
-        self.out_norm = nn.LayerNorm(2 * n_qubits)
+        self.out_norm = nn.LayerNorm(3 * n_qubits)
 
         self.state_proj = nn.Linear(self.state_dim, self.n_qubits)
         self.vqc = ReUploadingVQC(n_qubits=n_qubits, qnn_layers=qnn_layers, device_name=device_name)
         # Small linear heads to map quantum features -> outputs
-        self.mean_head    = nn.Linear(2 * n_qubits, action_dim)   # trước đây là n_qubits
-        self.log_std_head = nn.Linear(2 * n_qubits, action_dim)
-    # @staticmethod
-    # def _fit_to_qubits(x: torch.Tensor, n_qubits: int) -> torch.Tensor:
-    #     # Non-trainable fit: tile/crop to n_qubits
-    #     B, D = x.shape
-    #     if D == n_qubits:
-    #         return x
-    #     if D < n_qubits:
-    #         reps = (n_qubits + D - 1) // D
-    #         x_rep = x.repeat(1, reps)
-    #         return x_rep[:, :n_qubits]
-    #     else:
-    #         return x[:, :n_qubits]
+        self.mean_head    = nn.Linear(3 * n_qubits, action_dim)   # trước đây là n_qubits
+        self.log_std_head = nn.Linear(3 * n_qubits, action_dim)
 
     def forward(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         if state.dim() == 1:
@@ -204,7 +205,7 @@ class ReplayBuffer:
 # =============================================================
 class SACAgent:
     def __init__(self, state_dim, action_dim, max_action, device,
-                 n_qubits: int = 6, qnn_layers: int = 2, q_device_name: str = "lightning.gpu",
+                 n_qubits: int = 6, qnn_layers: int = 2, q_device_name: str = "lightning.qubit",
                  actor_lr: float = 1e-4, critic_lr: float = 2e-3, alpha_lr: float = 3e-4):
         self.device = device
 
@@ -238,28 +239,6 @@ class SACAgent:
             action, _ = self.actor.sample(state)
         return action.cpu().data.numpy().flatten()
 
-    # def select_action(self, state, evaluate=False, k=0):
-    #     s = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-    #     self.actor.eval()
-    #     with torch.inference_mode():
-    #         if evaluate and k > 0:
-    #             # sample K hành động, chọn cái có Q cao nhất
-    #             cand_actions = []
-    #             cand_qvals = []
-    #             for _ in range(k):
-    #                 a, _ = self.actor.sample(s)                # đã là tanh-squashed
-    #                 q1, q2 = self.critic(s, a)
-    #                 cand_actions.append(a)
-    #                 cand_qvals.append(torch.min(q1, q2))
-    #             best = torch.argmax(torch.stack(cand_qvals, dim=0).squeeze(-1), dim=0)
-    #             action = cand_actions[best]
-    #         else:
-    #             if evaluate:
-    #                 mean, _ = self.actor(s)                    # pre-tanh mean
-    #                 action = torch.tanh(mean) * self.max_action
-    #             else:
-    #                 action, _ = self.actor.sample(s)
-    #     return action.squeeze(0).cpu().numpy()
 
     def train(self, replay_buffer, batch_size=48, gamma=1.0, tau=1e-4):
         s, a, r, s_, d = replay_buffer.sample(batch_size)
@@ -295,9 +274,9 @@ class SACAgent:
             alpha_loss.backward()
             self.alpha_optim.step()
 
-        # ----- Target update (mỗi step; có thể cũng delay nếu muốn) -----
-        for p, tp in zip(self.critic.parameters(), self.critic_target.parameters()):
-            tp.data.mul_(1 - tau).add_(tau * p.data)
+            # ----- Target update (mỗi step; có thể cũng delay nếu muốn) -----
+            for p, tp in zip(self.critic.parameters(), self.critic_target.parameters()):
+                tp.data.mul_(1 - tau).add_(tau * p.data)
 
         self.train_step += 1
 
@@ -319,12 +298,12 @@ if __name__ == '__main__':
     # Quantum hyperparams for actor
     n_qubits = 6      # reduce for speed if needed
     qnn_layers = 2
-    q_device_name = "best"  # switch to "lightning.qubit" if installed for speed
+    q_device_name = "lightning.qubit"  # switch to "lightning.qubit" if installed for speed
 
     agent = SACAgent(state_dim, action_dim, max_action, device,
                      n_qubits=n_qubits, qnn_layers=qnn_layers, q_device_name=q_device_name,
                      actor_lr=1e-4, critic_lr=2e-3, alpha_lr=3e-4)
-    with open("ModelInfo/model_info_QSAC_6qubits_2layers_desaturation.txt", "w", encoding="utf-8") as f:
+    with open("ModelInfo/model_info_QSAC_6qubits_2layers_desaturation_ver2.txt", "w", encoding="utf-8") as f:
         f.write("===== ACTOR ARCHITECTURE =====\n")
         f.write(str(agent.actor) + "\n\n")
         actor_params = sum(p.numel() for p in agent.actor.parameters() if p.requires_grad)
@@ -351,9 +330,8 @@ if __name__ == '__main__':
         start_ep = 0
 
     # If you want to start
-    #start_ep = load_checkpoint(agent, buffer, "Checkpoint/sac_qsac_ep5000.pth", device=device)
+    #start_ep = load_checkpoint(agent, buffer, "Checkpoint/sac_qsacActor_desaturation_ep16000.pth", device=device)
     for ep in range(episodes):
-
         state, _ = env.reset()
         total_reward = 0.00
         done = False
@@ -376,23 +354,23 @@ if __name__ == '__main__':
         print(f"Episode {ep}, Reward: {total_reward:.2f}, | Demand=({demand_lte:.2f}, {demand_nr :.2f}) "
         f"| Alloc=({alloc_lte:.2f}, {alloc_nr:.2f})", flush=True)
         pd.DataFrame([{"episode": ep, "reward": total_reward, "alloc_lte":alloc_lte, "alloc_nr": alloc_nr, "demand_lte":demand_lte, "demand_nr":demand_nr}]).to_csv(
-            "logs/sac_qactor_training_log.csv",
+            "logs/sac_qactor_training_log_ver2.csv",
             mode='a',
-            header=not os.path.exists("logs/sac_qactor_training_log.csv"),
+            header=not os.path.exists("logs/sac_qactor_training_log_ver2.csv"),
             index=False
         )
-        if (ep + 1) % 4000 == 0:
-            save_checkpoint(agent, buffer, ep, f"Checkpoint/sac_qsacActor_desaturation_ep{ep+1}.pth")
+        if (ep + 1) % 2000 == 0:
+            save_checkpoint(agent, buffer, ep, f"Checkpoint2/qsac_ver2_qsacActor_desaturation_ep{ep+1}.pth")
         
 
     # Save & plot
-    torch.save(agent.actor.state_dict(), "Model/sac_qactor_actor_model_morePara_desaturation.pth")
-    pd.DataFrame(logs).to_csv("Result/sac_qactor_training_log_morePara_desaturation.csv", index=False)
+    torch.save(agent.actor.state_dict(), "Model/sac_qactor_actor_model_morePara_desaturation_ver2.pth")
+    pd.DataFrame(logs).to_csv("Result/sac_qactor_training_log_morePara_desaturation_ver2.csv", index=False)
     smoothed_rewards = pd.Series(rewards).rolling(window=100, min_periods=1).mean()
     plt.plot(smoothed_rewards)
     plt.xlabel("Episode")
     plt.ylabel("Reward")
     plt.title("SAC (Quantum Actor + Classic Critics) Training Reward")
     plt.grid(True)
-    plt.savefig("FigureReward/MorePara_desaturation_sac_qactor_training_reward_plot.png")
+    plt.savefig("FigureReward/MorePara_desaturation_sac_qactor_training_reward_plot_ver2.png")
     plt.show()
