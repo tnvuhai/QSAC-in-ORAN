@@ -1,6 +1,6 @@
 # Quantum-based-Reinforcement-Learning-for-Intelligent-Spectrum-Sharing-in-ORAN
 This repository is the official implementation for the paper: "Efficient Quantum Soft Actor-Critic Model for Dynamic Spectrum Sharing in Intelligent O-RAN".
-We introduce Quantum Soft Actor-Critic (QSAC), a novel hybrid quantum-classical reinforcement learning model designed to address the Dynamic Spectrum Sharing (DSS) challenge within the Open Radio Access Network (O-RAN) architecture. The model's objective is to intelligently and efficiently allocate spectrum resources between LTE and NR networks, optimizing performance and satisfying user demand in a dynamic environment. we extend and improve from Adapshare's work [1].
+We introduce Quantum Soft Actor-Critic (QSAC), a novel hybrid quantum-classical reinforcement learning model designed to address the Dynamic Spectrum Sharing (DSS) challenge within the Open Radio Access Network (O-RAN) architecture. The model's objective is to intelligently and efficiently allocate spectrum resources between LTE and NR networks, optimizing performance and satisfying user demand in a dynamic environment. We extend and improve from Adapshare's work [1].
 
 # QSAC Actor Architecture
 ![QSAC Actor Architecture](Images/Actor-archi.jpg "QSAC Actor Architecture")
@@ -17,7 +17,7 @@ We introduce Quantum Soft Actor-Critic (QSAC), a novel hybrid quantum-classical 
 ## Project Structure
 ```text
 Quantum-based-Reinforcement-Learning-for-Intelligent-Spectrum-Sharing-in-ORAN/
-├── Data/                     # Bandwidth demand data
+├── Data/                     # Demand data of LTE and NR network
 │   ├── LTE_Demand_32.xlsx
 │   ├── NR_Demand_32.xlsx
 │   ├── LTE_Demand_hourly.tsv
