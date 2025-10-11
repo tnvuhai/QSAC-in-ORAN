@@ -1,0 +1,31 @@
+ARCH: classical
+
+===== ACTOR ARCHITECTURE =====
+DDPGActor(
+  (net): Sequential(
+    (0): Linear(in_features=25, out_features=256, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=256, out_features=256, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=256, out_features=2, bias=True)
+    (5): Tanh()
+  )
+)
+
+Actor params: 72,962
+
+===== CRITIC ARCHITECTURE =====
+DDPGCritic(
+  (net): Sequential(
+    (0): Linear(in_features=27, out_features=256, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=256, out_features=256, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=256, out_features=1, bias=True)
+  )
+)
+
+Critic params: 73,217
+
+===== TOTAL TRAINABLE PARAMETERS =====
+146,179
