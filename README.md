@@ -84,6 +84,6 @@ python inference_model_all_separated.py
 This project is licensed under the MIT License. See the LICENSE file for details. 
 If you have any questions or issues, please contact my email: nvhai.it.tn@gmail.com or send some issues that you found.
 ## References
-[1] S. Gopal, D. Griffith, R. A. Rouil and C. Liu, "AdapShare: An RL-Based Dynamic Spectrum Sharing Solution for O-RAN," 2025 IEEE 22nd Consumer Communications & Networking Conference (CCNC), Las Vegas, NV, USA, 2025, pp. 1-7, doi: 10.1109/CCNC54725.2025.10976195. keywords: {System performance;Scalability;Heuristic algorithms;Open RAN;Reinforcement learning;Heterogeneous networks;Resource management;Indexes;Long Term Evolution;Radio spectrum management},
+[1] S. Gopal, D. Griffith, R. A. Rouil and C. Liu, "AdapShare: An RL-Based Dynamic Spectrum Sharing Solution for O-RAN," 2025 IEEE 22nd Consumer Communications & Networking Conference (CCNC), Las Vegas, NV, USA, 2025, pp. 1-7, doi: 10.1109/CCNC54725.2025.10976195.
 
 
