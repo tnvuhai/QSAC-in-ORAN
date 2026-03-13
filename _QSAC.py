@@ -95,7 +95,7 @@ class QuantumActor(nn.Module):
         self.state_dim = state_dim
 
         self.in_norm  = nn.LayerNorm(n_qubits)
-        self.delta     = nn.Parameter(torch.tensor(0.5))
+        self.beta     = nn.Parameter(torch.tensor(0.5))
         self.out_norm = nn.LayerNorm(3 * n_qubits)
 
         self.state_proj = nn.Linear(self.state_dim, self.n_qubits)
@@ -110,7 +110,7 @@ class QuantumActor(nn.Module):
         state = state.to(torch.float32)   
         x = self.state_proj(state)
         x = self.in_norm(x)
-        x = math.pi * torch.tanh(self.delta * x)
+        x = math.pi * torch.tanh(self.beta * x)
         feats = self.vqc(x).to(state.device)               
         feats = self.out_norm(feats)
         mean = self.mean_head(feats)

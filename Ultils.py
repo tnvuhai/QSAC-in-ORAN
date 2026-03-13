@@ -223,7 +223,7 @@ def load_actor_from_checkpoint(path: str, actor: torch.nn.Module, map_location=N
     else:
         candidate = ckpt
 
-    missing, unexpected = actor.load_state_dict(candidate, strict=False)
+    missing, unexpected = actor.load_state_dict(candidate, strict=True)
     if missing:
         print(f"[WARN] Missing keys in actor: {missing}")
     if unexpected:
