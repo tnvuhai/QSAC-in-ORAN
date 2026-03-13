@@ -67,7 +67,6 @@ def run_model_timeseries(name, cfg):
         obs_np = np.asarray(obs, dtype=np.float32)
         action = agent.select_action(obs_np, evaluate=True)
         next_obs, reward, terminated, truncated, info = env.step(action)
-        print(f"Step {step}")
         alloc_lte, alloc_nr   = info["alloc"]
         demand_lte, demand_nr = info["demand"]
         rows.append({

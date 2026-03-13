@@ -9,7 +9,7 @@ import pandas as pd
 import random
 import os
 
-from MainEnv import ResourceAllocationEnv, load_demand_data, normalize_action
+from MainEnv import ResourceAllocationEnv, load_demand_data
 
 # =============================
 # 1. Actor and Critic Networks
