@@ -2,8 +2,9 @@
 *This project has been published at IEEE ICC 2026: [IEEE Xplore Document](https://ieeexplore.ieee.org/document/11587335)
 
 There is a typo in the paper, the right objective function should be:
+
 \[
-J_{ers} = \zeta \left( \frac{A_{L,t} - D_{L,t}}{D_{L,t}} \right)^2 
+J_{ers} = \zeta \left( \frac{A_{L,t} - D_{L,t}}{D_{L,t}} \right)^2
 + (1 - \zeta) \left( \frac{A_{N,t} - D_{N,t}}{D_{N,t}} \right)^2
 \]
 
